@@ -1,4 +1,4 @@
-# AI-Driven-Financial-News-Intelligence-System
+# AI-Driven-Financial-News-Intelligence-System (In-Progress)
 
 <div align="center">
 
