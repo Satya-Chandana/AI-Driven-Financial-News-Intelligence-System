@@ -51,6 +51,8 @@ The system produces a structured synthesis report covering technical, fundamenta
 ## Architecture
 
 ### Architecture Diagram
+![Architecture Diagram]([https://github.com/cs494-agentic-ai-spring-2026/group-project-code-submission-team10/blob/main/Images/Architecture%20Diagram.jpeg](https://github.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/blob/main/Images/Architecture%20Diagram.jpeg))
+
 
 ### High-Level Flow
 
