@@ -46,13 +46,13 @@ Any publicly traded ticker supported by yfinance and Alpha Vantage will work.
 
 The system produces a structured synthesis report covering technical, fundamental, and news + sentiment signals, with a final market bias, confidence level, and key risks.
 
+![Output](https://raw.githubusercontent.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/main/Images/Output.jpeg)
 ---
 
 ## Architecture
 
 ### Architecture Diagram
-![Architecture Diagram]([https://github.com/cs494-agentic-ai-spring-2026/group-project-code-submission-team10/blob/main/Images/Architecture%20Diagram.jpeg](https://github.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/blob/main/Images/Architecture%20Diagram.jpeg))
-
+![Architecture Diagram](https://raw.githubusercontent.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/main/Images/Architecture%20Diagram.jpeg)
 
 ### High-Level Flow
 
