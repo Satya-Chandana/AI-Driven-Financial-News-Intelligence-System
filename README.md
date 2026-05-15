@@ -1,6 +1,6 @@
-# AI-Driven-Financial-News-Intelligence-System (In-Progress)
-
 <div align="center">
+
+# 🤖 Multi-Agent Trading Intelligence System
 
 *Decomposed market analysis across parallel specialized agents — unified into a single explainable trading decision.*
 
@@ -10,22 +10,210 @@
 
 </div>
 
----
 
 ## Description
 
 This project implements a **multi-agent trading intelligence system** that analyzes financial markets using specialized agents and combines their reasoning into a unified, explainable trading decision.
 
-Instead of relying on a single model or a single source of information, the system decomposes the problem into multiple **signal-specific agents**, where each agent is responsible for a different dimension of market analysis. The current system includes:
+The system decomposes the analysis problem into a full pipeline of **13 specialized agents** across five stages: memory retrieval, parallel market analysis, structured debate, risk management, and post-decision reflection. Each agent is responsible for a distinct dimension of the pipeline — no single model carries the full reasoning burden.
 
-- a **Technical Analyst** for price- and momentum-based signals
-- a **Fundamental Analyst** for company financial health and long-term valuation signals
-- a **News + Sentiment Analyst** for external information flow using recency-weighted news and sentiment analysis
+The pipeline produces a final decision of **BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL** with a conviction score, risk verdicts from three specialist analysts, and a complete per-stage output log. Every decision is persisted to a SQLite database and automatically evaluated at T+5 trading days via a reflection agent.
 
-These agents run in parallel and feed into a **Chain-of-Thought (CoT) Synthesis Agent**, which aggregates their outputs, identifies agreement or conflict across signals, and produces a final interpretable market view.
+---
 
-The broader target architecture also includes memory, debate, risk management, trader decisioning, and reflection layers for building a more robust and adaptive trading pipeline.
+## Architecture
 
+### Full Pipeline Flow
+
+```
+        Input: Ticker Symbol + Analysis Date + Debate Rounds
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                        Memory Agent                          │
+│  Retrieves past 5 decisions for the ticker from SQLite DB    │
+│  Formats historical context → injected into analyst prompts  │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   Parallel Analyst Layer                     │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │  Technical   │  │ Fundamental  │  │  News + Sentiment  │  │
+│  │   Analyst    │  │   Analyst    │  │      Analyst       │  │
+│  │  [yfinance]  │  │ [SEC EDGAR]  │  │  [Alpha Vantage]   │  │
+│  └──────────────┘  └──────────────┘  └───────────────────┘  │
+│         All three run concurrently via LangGraph             │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   CoT Synthesis Agent                        │
+│  Aggregates all three analyst reports                        │
+│  Identifies agreement and conflict across signals            │
+│  Produces provisional bias (bullish / bearish / neutral)     │
+└──────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
+┌──────────────────────────────────────────────────────────────┐
+│                       Debate Layer                           │
+│                                                              │
+│   ┌────────────────┐  ←── N rounds ───→  ┌───────────────┐  │
+│   │  Bull Research │                     │ Bear Research │  │
+│   │     Agent      │                     │     Agent     │  │
+│   └────────────────┘                     └───────────────┘  │
+│                           ↓                                  │
+│          ┌─────────────────────────────────┐                 │
+│          │         Neutral Arbiter         │                 │
+│          │  Scores evidence, rigor, and    │                 │
+│          │  rebuttal quality (1–5 each)    │                 │
+│          │  Flags contradictions           │                 │
+│          └─────────────────────────────────┘                 │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                       Trader Agent                           │
+│  Sees bull + bear arguments and arbiter verdict              │
+│  Also receives memory context from past decisions            │
+│  Outputs: BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL       │
+│  Assigns conviction score 1–5                                │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Specialist Risk Panel                       │
+│                                                              │
+│  ┌───────────────┐  ┌────────────────┐  ┌────────────────┐  │
+│  │  Tail-Risk    │  │  Macro/Regime  │  │   Liquidity    │  │
+│  │   Analyst     │  │    Analyst     │  │    Analyst     │  │
+│  │ (drawdown     │  │ (market regime │  │ (microstructure│  │
+│  │  scenarios)   │  │  context)      │  │  execution)    │  │
+│  └───────────────┘  └────────────────┘  └────────────────┘  │
+│                           ↓                                  │
+│          ┌─────────────────────────────────┐                 │
+│          │          Risk Arbiter           │                 │
+│          │  Synthesizes 3 risk specialists │                 │
+│          │  May downgrade trader call if   │                 │
+│          │  2+ specialists raise alarms    │                 │
+│          └─────────────────────────────────┘                 │
+└──────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│               Devil's-Advocate Critic Agent                  │
+│  Reads the full pipeline transcript                          │
+│  Finds the strongest reason the decision could be wrong      │
+│  Rates challenge strength: WEAK / MODERATE / STRONG          │
+│                                                              │
+│     If STRONG → triggers one full re-debate round            │
+│     (Bull + Bear + Arbiter → Trader → Risk Panel again)      │
+│     If WEAK or MODERATE → passes through unchanged           │
+└──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   Final Decision + Persist                   │
+│  Saves decision to SQLite with entry price, conviction,      │
+│  bias, confidence, all agent outputs, and T+5 eval date      │
+└──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    Reflection Agent (T+5)                    │
+│  Fires automatically 5 trading days after each decision      │
+│  Fetches realized return at T+5                              │
+│  Writes post-mortem analysis back to memory DB               │
+│  Labels outcome: win / loss / flat                           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ✅ Implemented Agents
+
+### 🧠 Memory Agent
+- Retrieves the past 5 decisions for the requested ticker from SQLite
+- Formats them as a historical context block (date, decision, conviction, outcome)
+- Injects context into analyst and trader prompts without anchoring
+
+### 📈 Technical Analyst
+- Fetches 180 days of price data via yfinance
+- Computes RSI(14), MACD, Bollinger Bands, VWAP(20d), volume z-score, and 52-week range
+- Generates a step-by-step technical analysis report via LLM
+
+### 📊 Fundamental Analyst
+- Pulls structured financial data from SEC EDGAR (revenue, earnings, assets, liabilities, equity, EPS)
+- Analyzes 4-year trends
+- Generates a fundamental outlook (bullish / bearish / neutral) via LLM
+
+### 📰 News + Sentiment Analyst
+- Fetches 50 recent articles via Alpha Vantage
+- Applies recency weighting so newer articles have greater impact
+- Aggregates sentiment metrics and actionable catalysts via LLM
+
+### 🔗 CoT Synthesis Agent
+- Summarizes each analyst's directional view
+- Identifies agreement and conflict across the three reports
+- Produces a provisional bias, confidence level, and trader-facing takeaway
+
+### 🐂 Bull Researcher
+- Constructs the strongest long thesis anchored to analyst signals
+- Rebuts bear arguments directly in each debate round
+- Responds to critic challenges if re-debate is triggered
+
+### 🐻 Bear Researcher
+- Constructs the strongest short or avoid thesis
+- Addresses the bull's strongest claims in each round
+- Responds to critic challenges if re-debate is triggered
+
+### ⚖️ Neutral Arbiter
+- Scores bull and bear on evidence quality, rigor, and rebuttal strength (1–5 each)
+- Flags contradictions and unsupported claims
+- Renders a verdict (bull / bear / tie) with strength (strong / moderate / weak)
+
+### 📉 Trader Agent
+- Synthesizes bull, bear, and arbiter outputs together with memory context
+- Outputs one of: BUY / OVERWEIGHT / HOLD / UNDERWEIGHT / SELL
+- Assigns conviction score 1–5 with supporting rationale
+
+### ⚠️ Tail-Risk Analyst
+- Assesses extreme drawdown scenarios and worst-case bias
+- Outputs: ELEVATED / MODERATE / LOW
+
+### 🌍 Macro / Regime Analyst
+- Evaluates current market regime and broader macro context
+- Outputs: HOSTILE / MIXED / SUPPORTIVE
+
+### 💧 Liquidity Analyst
+- Evaluates execution microstructure conditions
+- Outputs: STRESSED / NORMAL / AMPLE
+
+### 🛡️ Risk Arbiter
+- Synthesizes all three risk specialist verdicts
+- Downgrades the trader's call by one step if 2+ specialists raise alarms
+
+### 😈 Devil's-Advocate Critic
+- Reads the complete pipeline transcript after the risk arbiter
+- Identifies the strongest single reason the current decision could be wrong
+- Rates challenge strength: WEAK / MODERATE / STRONG
+- If STRONG, triggers one full re-debate round (Bull + Bear + Arbiter → Trader → Risk Panel)
+
+### 🔍 Reflection Agent (T+5)
+- Evaluates decisions whose 5-trading-day window has elapsed
+- Fetches realized price return
+- Writes a post-mortem analysis and updates the memory DB with outcome and label
+
+---
+
+## 🖥️ UI
+
+The system includes a **Streamlit web dashboard** (`app.py`) with live agent execution status, per-stage output tabs, a risk panel, and a past decisions browser.
+
+![Run Analysis](Images/ui_run_analysis.png)
+
+![Past Decisions](Images/ui_past_decisions.png)
 
 ---
 
@@ -33,115 +221,16 @@ The broader target architecture also includes memory, debate, risk management, t
 
 ### Input
 
-The system accepts any valid stock ticker symbol as input.
+Any valid stock ticker supported by yfinance and Alpha Vantage:
 ```bash
 python main.py AAPL
 python main.py TSLA
 python main.py NVDA
 ```
 
-Any publicly traded ticker supported by yfinance and Alpha Vantage will work.
+### CLI Output
 
-### Output
-
-The system produces a structured synthesis report covering technical, fundamental, and news + sentiment signals, with a final market bias, confidence level, and key risks.
-
-![Output](https://raw.githubusercontent.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/main/Images/Output.jpeg)
----
-
-## Architecture
-
-### Architecture Diagram
-![Architecture Diagram](https://raw.githubusercontent.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/main/Images/Architecture%20Diagram.jpeg)
-
-### High-Level Flow
-
-```
-Input Ticker
-│
-▼
-Memory Agent
-(injects past decision history into analyst prompts)
-│
-▼
-┌─────────────────────────────────────────────────────────┐
-│               Parallel Analyst Layer                    │
-│                                                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │  Technical   │  │ Fundamental  │  │    News +    │   │
-│  │   Analyst    │  │   Analyst    │  │  Sentiment   │   │
-│  │  [yfinance]  │  │ [SEC EDGAR]  │  │[AlphaVantage]│   │
-│  └──────────────┘  └──────────────┘  └──────────────┘   │
-└─────────────────────────────────────────────────────────┘
-│
-▼
-CoT Synthesis Node
-(aggregates reports, identifies agreement and conflict,
-produces a provisional bias)
-│
-▼
-┌─────────────────────────────────────────────────────────┐
-│                    Debate Layer                         │
-│                                                         │
-│  ┌────────────┐  ←debate rounds→  ┌────────────┐        │
-│  │    Bull    │                   │    Bear    │        │
-│  │ Researcher │                   │ Researcher │        │
-│  └────────────┘                   └────────────┘        │
-│                        ↓ (after debate ends)            │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │                Neutral Arbiter                   │   │
-│  │  (reads final bull + bear output, scores         │   │
-│  │  argument quality, flags contradictions)         │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-│
-▼
-Trader Agent
-(sees bull + bear arguments and arbiter verdict,
-outputs rating + conviction score 1–5)
-│
-▼
-Risk Manager
-(market regime check, volatility flag,
-may adjust or override decision)
-│
-▼
-Final Decision
-(Buy / Overweight / Hold / Underweight / Sell)
-│
-▼
-Reflection + Memory Update
-(stores decision to SQLite, fires at T+5 trading days
-to check outcome, writes post-mortem back to memory DB)
-```
-
----
-
-## ✅ Current Implementation
-
-### 📈 Technical Analyst
-- Fetches historical market data
-- Computes indicators such as RSI, MACD, Bollinger Bands, VWAP, and volume-based signals
-- Generates a technical analysis report using an LLM
-
-### 📊 Fundamental Analyst
-- Fetches structured company data from EDGAR
-- Analyzes revenue, earnings, assets, liabilities, and equity trends
-- Generates a fundamental analysis report using an LLM
-
-### 📰 News + Sentiment Analyst
-- Uses Alpha Vantage news sentiment data
-- Applies recency weighting so newer news has more impact
-- Aggregates sentiment across articles
-- Generates a combined external-signal report using an LLM
-
-### 🧠 CoT Synthesis Agent
-- Combines outputs from all currently implemented analyst agents
-- Produces a final synthesis across technical, fundamental, and news/sentiment signals
-
-### ⚡ Parallel Execution with LangGraph
-- Analyst agents are executed concurrently
-- Outputs are routed into the synthesis layer
+![Sample Output](https://github.com/Satya-Chandana/AI-Driven-Financial-News-Intelligence-System/blob/main/Images/Output.jpeg)
 
 ---
 
@@ -151,7 +240,7 @@ to check outcome, writes post-mortem back to memory DB)
 
 - **Python 3.10 or above**
 
-### Recommended Dependencies
+### Dependencies
 
 | Package | Purpose |
 |:--------|:--------|
@@ -163,13 +252,13 @@ to check outcome, writes post-mortem back to memory DB)
 | `numpy` | Numerical computation |
 | `requests` | HTTP calls |
 | `python-dotenv` | Environment variable management |
+| `streamlit` | Web UI |
 
 ### Installation
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone 
 ```
 
 **2. Create and activate a virtual environment**
@@ -198,75 +287,37 @@ LLM_MODEL=gemini-2.5-flash
 GOOGLE_API_KEY=your_google_api_key
 ALPHAVANTAGE_API_KEY=your_alpha_vantage_api_key
 ```
-> *Note:* You need an [Alpha Vantage API key](https://www.alphavantage.co/support/#api-key) for the news/sentiment analyst. The system supports multiple LLM providers — use whichever you prefer:
-> 
->| Provider | LLM_PROVIDER value | Key to add |
-> |:---------|:---------------------|:-----------|
-> | Google Gemini (default) | google | GOOGLE_API_KEY from [Google AI Studio](https://aistudio.google.com/) |
-> | OpenAI | openai | OPENAI_API_KEY from [OpenAI](https://platform.openai.com/api-keys) |
-> | Anthropic | anthropic | ANTHROPIC_API_KEY from [Anthropic Console](https://console.anthropic.com/) |
 
-### ▶️ Running the Project
+The system supports multiple LLM providers:
 
-Run the system with a ticker symbol:
-
-```bash
-python main.py AAPL
-```
-Replace AAPL with any valid ticker symbol (e.g., TSLA, MSFT, NVDA, GOOG)
+| Provider | LLM_PROVIDER value | Key to set |
+|:---------|:-------------------|:-----------|
+| Google Gemini (default) | `google` | `GOOGLE_API_KEY` from [Google AI Studio](https://aistudio.google.com/) |
+| OpenAI | `openai` | `OPENAI_API_KEY` from [OpenAI](https://platform.openai.com/api-keys) |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` from [Anthropic Console](https://console.anthropic.com/) |
 
 ---
 
-## 🔮 Future Implementations
+## ▶️ Running the Project
 
-<details>
-<summary><b>Memory Agent</b></summary>
+### CLI
+```bash
+python main.py AAPL
+```
+Replace `AAPL` with any valid ticker (e.g. `TSLA`, `MSFT`, `NVDA`, `GOOG`).
 
-- Retrieves past decisions and outcomes for the same ticker
-- Injects relevant historical context into the pipeline
+### Web UI (Streamlit)
+```bash
+streamlit run app.py
+```
+Opens at `http://localhost:8501`. Select a company, pick an analysis date, set debate rounds, and click **Analyze**.
 
-</details>
+---
 
-<details>
-<summary><b>Debate Layer</b></summary>
+## 🧪 Running Tests
 
-- Bull Researcher
-- Bear Researcher
-- Neutral Arbiter to score and resolve conflicting views
+```bash
+python -m pytest Tests/ -v
+```
 
-</details>
-
-<details>
-<summary><b>Trader Agent</b></summary>
-
-- Converts synthesized reasoning into a final rating such as Buy, Hold, or Sell
-- Assigns a conviction score
-
-</details>
-
-<details>
-<summary><b>Risk Manager</b></summary>
-
-- Evaluates market regime and volatility conditions
-- Adjusts final recommendations based on risk context
-
-</details>
-
-<details>
-<summary><b>Reflection Agent</b></summary>
-
-- Evaluates post-decision outcomes after a fixed horizon
-- Generates post-mortem analysis
-- Updates long-term memory for future runs
-
-</details>
-
-<details>
-<summary><b>Persistence and API Layer</b></summary>
-
-- Decisions database
-- History endpoint
-- Scheduler for multi-ticker watchlists
-- Notification and monitoring support
-
-</details>
+All tests use mocked LLMs, market data, EDGAR, and news APIs — no real API calls or keys required.
