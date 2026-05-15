@@ -47,8 +47,11 @@ def run_fundamentals_analyst(state: dict, config: dict = None) -> dict:
 
     data_block = "\n\n".join(sections)
 
-    prompt = f"""Ticker: {ticker}  |  CIK: {facts.get('cik', 'unknown')}
+    memory_block = state.get("memory_context", "")
+    memory_section = f"\n\n{memory_block}\n" if memory_block else ""
 
+    prompt = f"""Ticker: {ticker}  |  CIK: {facts.get('cik', 'unknown')}
+{memory_section}
 SEC EDGAR annual filing data (last 4 years):
 
 {data_block}

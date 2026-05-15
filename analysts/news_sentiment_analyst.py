@@ -41,8 +41,11 @@ def run_news_sentiment_analyst(state: dict, config: dict = None) -> dict:
 
     article_block = "\n".join(article_lines) if article_lines else "No recent articles found."
 
-    prompt = f"""Ticker: {ticker}
+    memory_block = state.get("memory_context", "")
+    memory_section = f"\n\n{memory_block}\n" if memory_block else ""
 
+    prompt = f"""Ticker: {ticker}
+{memory_section}
 Aggregated metrics:
 - Article count: {metrics['article_count']}
 - Average sentiment: {metrics['avg_sentiment']}

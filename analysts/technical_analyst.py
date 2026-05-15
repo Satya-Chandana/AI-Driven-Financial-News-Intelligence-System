@@ -15,11 +15,15 @@ def run_technical_analyst(state: dict, config: dict = None) -> dict:
     cfg     = config or {}
     llm     = get_llm(cfg)
 
-    df      = get_price_history(ticker, cfg.get("lookback_days", 180))
+    df      = get_price_history(ticker, cfg.get("lookback_days", 180),
+                                end_date=state.get("as_of_date"))
     metrics = compute_indicators(df, ticker)
 
-    prompt = f"""Ticker: {ticker}
+    memory_block = state.get("memory_context", "")
+    memory_section = f"\n\n{memory_block}\n" if memory_block else ""
 
+    prompt = f"""Ticker: {ticker}
+{memory_section}
 Technical indicators (as of {metrics['ticker']}):
 - Current price:     ${metrics['current_price']}
 - RSI(14):           {metrics['rsi_14']}

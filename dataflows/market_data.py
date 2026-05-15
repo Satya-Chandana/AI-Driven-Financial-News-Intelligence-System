@@ -3,14 +3,29 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-def get_price_history(ticker: str, lookback_days: int = 180) -> pd.DataFrame:
-    end = datetime.today()
+
+def _coerce_end_date(end_date) -> datetime:
+    """Accept None | 'YYYY-MM-DD' | datetime | date and return a datetime."""
+    if end_date is None:
+        return datetime.today()
+    if isinstance(end_date, datetime):
+        return end_date
+    if hasattr(end_date, "isoformat") and not isinstance(end_date, str):
+        return datetime.fromisoformat(end_date.isoformat())
+    return datetime.fromisoformat(str(end_date))
+
+
+def get_price_history(ticker: str, lookback_days: int = 180,
+                      end_date=None) -> pd.DataFrame:
+    """Daily OHLCV ending on `end_date` (default: today)."""
+    end = _coerce_end_date(end_date)
     start = end - timedelta(days=lookback_days)
+    end_inclusive = end + timedelta(days=1)  # yfinance end is exclusive
 
     df = yf.download(
         ticker,
         start=start.strftime("%Y-%m-%d"),
-        end=end.strftime("%Y-%m-%d"),
+        end=end_inclusive.strftime("%Y-%m-%d"),
         auto_adjust=True,
         progress=False,
     )
